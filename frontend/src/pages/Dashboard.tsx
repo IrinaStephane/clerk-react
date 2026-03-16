@@ -1,76 +1,68 @@
-import { useUser, useClerk, useAuth } from "@clerk/react"
-import { useState, useEffect } from "react"
-
-interface Tournament {
-  id: number;
-  title: string;
-}
+import { useEffect, useState } from "react"
+import { useAuth, useClerk, useUser } from "@clerk/react"
 
 export default function Dashboard() {
   const { user } = useUser()
-  const { signOut } = useClerk()
   const { getToken } = useAuth()
-  
-  const [tournaments, setTournaments] = useState<Tournament[]>([])
-  const [newTitle, setNewTitle] = useState("")
+  const [dbUser, setDbUser] = useState<any>(null)
+  const { signOut } = useClerk()
 
-  // Charger les tournois au démarrage
+  function logout() {
+    signOut(() => {
+      window.location.href = "/"
+    })
+  }
+
+
   useEffect(() => {
-    fetchTournaments()
-  }, [])
+    const syncUser = async () => {
+      try {
+        const token = await getToken()
+        const response = await fetch("http://localhost:3000/api/auth/me", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        })
+        
+        if (response.ok) {
+          const data = await response.json()
+          setDbUser(data)
+        }
+      } catch (err) {
+        console.error("Erreur de synchro:", err)
+      }
+    }
 
-  const fetchTournaments = async () => {
-    const token = await getToken()
-    const res = await fetch("http://localhost:3000/api/tournaments", {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    const data = await res.json()
-    setTournaments(data)
-  }
-
-  const createTournament = async () => {
-    if (!newTitle) return
-    const token = await getToken()
-    await fetch("http://localhost:3000/api/tournaments", {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}` 
-      },
-      body: JSON.stringify({ title: newTitle })
-    })
-    setNewTitle("")
-    fetchTournaments()
-  }
+    syncUser()
+  }, [getToken])
 
   return (
     <div>
-      <h1>Tableau de bord de {user?.firstName}</h1>
+      <h1>Tableau de Bord</h1>
+      <p>Connecté en tant que : {user?.primaryEmailAddress?.emailAddress}</p>
       
-      <section>
-        <h3>Créer un tournoi</h3>
-        <input 
-          value={newTitle} 
-          onChange={(e) => setNewTitle(e.target.value)} 
-          placeholder="Nom du tournoi"
-        />
-        <button onClick={createTournament}>Ajouter</button>
-      </section>
-
       <hr />
-
-      <section>
-        <h3>Mes Tournois</h3>
-        <ul>
-          {tournaments.map(t => (
-            <li key={t.id}>{t.title}</li>
-          ))}
-        </ul>
-      </section>
-
-      <button onClick={() => signOut(() => window.location.href = "/")}>
-        Déconnexion
+      <button onClick={logout}>
+        Logout
       </button>
+      <h2>Mes informations en base de données :</h2>
+      {dbUser ? (
+        <div>
+          
+          <p>ID Prisma : {dbUser.id}</p>
+          <p>Nom : {dbUser.name}</p>
+          <h3>Mes Posts :</h3>
+          {dbUser.posts?.length > 0 ? (
+            <ul>
+              {dbUser.posts.map((p: any) => <li key={p.id}>{p.title}</li>)}
+            </ul>
+          ) : <p>Aucun post.</p>}
+        </div>
+      ) : (
+        <p>Synchronisation avec la base de données...</p>
+      )}
     </div>
   )
 }
